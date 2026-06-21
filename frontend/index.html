@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>서울 코포레이션: 재벌의 탄생</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            chaebol: {
+              900: '#0f172a',
+              800: '#1e293b',
+              700: '#334155',
+              gold: '#fbbf24',
+              green: '#10b981',
+              red: '#ef4444',
+              blue: '#3b82f6'
+            }
+          },
+          animation: {
+            'marquee': 'marquee 45s linear infinite',
+          },
+          keyframes: {
+            marquee: {
+              '0%': { transform: 'translateX(100vw)' },
+              '100%': { transform: 'translateX(-100%)' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+  </head>
+<body class="bg-chaebol-900 text-slate-200 font-sans antialiased h-screen overflow-hidden">
+  <div id="root" class="h-full"></div>
+  <script type="module" src="./index.tsx"></script>
+<script type="module" src="/index.js"></script></body>
+</html>
