@@ -1,340 +1,177 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { GameState } from '../types';
-import { formatCurrency, getGameTimeInfo } from '../constants';
-import { Card, Badge, Button } from './ui';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { Wallet, TrendingUp, Building, Briefcase, MessageSquare, Crown, Edit2 } from 'lucide-react';
+import React from 'react';
+import { GameState, Review } from '../types.ts';
+import { AGENCY_STAGES, STAT_DESCRIPTIONS, EMPLOYEE_ROLES, EMPLOYEE_LEVELS } from '../constants.ts';
+import { generateId, formatGameDateShort } from '../utils.ts';
+import { StatBar } from './StatBar.tsx';
+import { Users, TrendingUp, Brain, Heart, Award, Star, Building2, Megaphone, UserPlus, MessageSquare } from 'lucide-react';
 
 interface DashboardProps {
-  state: GameState;
-  onSendMessage: (text: string) => void;
-  onSetGroupName?: (name: string) => void;
+  gameState: GameState;
+  setGameState: React.Dispatch<React.SetStateAction<GameState>>;
+  addLog: (msg: string, type: 'info' | 'success' | 'error' | 'warning') => void;
+  reviews: Review[];
+  onUpgradeAgency: () => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ state, onSendMessage, onSetGroupName }) => {
-  const [chatInput, setChatInput] = useState('');
-  const [groupNameInput, setGroupNameInput] = useState('');
-  const [isEditingGroupName, setIsEditingGroupName] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+export const Dashboard: React.FC<DashboardProps> = ({ gameState, setGameState, addLog, reviews, onUpgradeAgency }) => {
+  const currentStageInfo = AGENCY_STAGES[gameState.stage];
+  const nextStageInfo = AGENCY_STAGES[gameState.stage + 1];
 
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [state.chatMessages]);
-
-  const handleSend = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!chatInput.trim()) return;
-    onSendMessage(chatInput);
-    setChatInput('');
+  const upgradeAgency = () => {
+    if (!nextStageInfo) return;
+    // App.tsx에서 처리하도록 콜백 호출
+    onUpgradeAgency();
   };
 
-  const handleGroupNameSubmit = () => {
-    if (groupNameInput.trim() && onSetGroupName) {
-      onSetGroupName(groupNameInput.trim());
-      setIsEditingGroupName(false);
-    }
+  const hireEmployee = () => {
+    const role = EMPLOYEE_ROLES[Math.floor(Math.random() * EMPLOYEE_ROLES.length)];
+    const newEmployee = {
+      id: generateId(),
+      name: `직원${Math.floor(Math.random() * 1000)}`,
+      role,
+      level: 0,
+      levelName: EMPLOYEE_LEVELS[0],
+      salary: 2000000,
+      bonus: 5
+    };
+    // 테스트를 위해 비용 차감 제거
+    setGameState(prev => ({
+      ...prev,
+      employees: [...prev.employees, newEmployee]
+    }));
+    addLog(`[채용] ${newEmployee.name} (${role}) 채용 완료! (테스트: 무료)`, "success");
   };
 
-  // Calculate Net Worth
-  const stockValue = state.companies.reduce((acc, c) => acc + (c.stockPrice * c.playerShares), 0);
-  const realEstateValue = state.districts.reduce((acc, d) => {
-    let val = 0;
-    if (d.owner === 'Player') val += d.landPrice;
-    d.buildings.filter(b => b.ownerType === 'Player').forEach(b => {
-      if (b.type === '사무실 빌딩') val += 500000000;
-      if (b.type === '마케팅 센터') val += 1000000000;
-      if (b.type === '연구소') val += 2000000000;
-      if (b.type === '물류 센터') val += 3000000000;
-      if (b.type === '복합 타워') val += 5000000000;
-      if (b.type === '본사 빌딩') val += 10000000000;
-    });
-    return acc + val;
-  }, 0);
-  
-  const depositValue = state.deposits.reduce((acc, d) => acc + d.principal + d.interestEarned, 0);
-  const netWorth = state.cash + stockValue + realEstateValue + depositValue - state.loanAmount + state.privateLoanFund;
-  
-  const acquiredCompaniesCount = state.companies.filter(c => c.isAcquired).length;
-  const ownedLandCount = state.districts.filter(d => d.owner === 'Player').length;
-  const builtCount = state.districts.reduce((sum, d) => sum + d.buildings.filter(b => b.ownerType === 'Player').length, 0);
-
-  const isGroupChairman = acquiredCompaniesCount >= 3;
+  const buyMarketing = () => {
+    // 테스트를 위해 비용 차감 제거
+    setGameState(prev => ({
+      ...prev,
+      marketingBuff: 3 // 3 days buff
+    }));
+    addLog(`[마케팅] 대대적인 광고 캠페인을 시작합니다! 3일간 의뢰가 증가합니다. (테스트: 무료)`, "success");
+  };
 
   return (
-    <div className="flex flex-col xl:flex-row gap-6 h-full overflow-hidden">
-      
-      {/* Left: Main Dashboard Content */}
-      <div className="flex-1 min-w-0 space-y-6 overflow-y-auto pr-2 custom-scrollbar">
-        
-        <div className="flex flex-col md:flex-row md:justify-between md:items-end gap-4 mb-4">
-          <h2 className="text-2xl font-bold">경영 요약</h2>
-          {isGroupChairman && (
-            <div className="flex items-center gap-3 bg-slate-800/50 p-2 rounded-lg border border-yellow-700/30">
-              <Badge variant="warning">계열사 {acquiredCompaniesCount}개</Badge>
-              {state.groupName && !isEditingGroupName ? (
-                <div className="flex items-center gap-3">
-                  <div className="text-lg font-bold text-chaebol-gold flex items-center gap-2">
-                    <Crown size={20} />
-                    {state.groupName} 그룹 회장 {state.currentUser}
-                  </div>
-                  <button 
-                    onClick={() => {
-                      setGroupNameInput(state.groupName || '');
-                      setIsEditingGroupName(true);
-                    }}
-                    className="text-slate-400 hover:text-white transition-colors"
-                    title="그룹 이름 수정"
-                  >
-                    <Edit2 size={16} />
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={groupNameInput}
-                    onChange={(e) => setGroupNameInput(e.target.value)}
-                    placeholder="그룹 이름 입력"
-                    className="bg-slate-900 border border-slate-700 text-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:border-chaebol-gold w-32"
-                    onKeyDown={(e) => e.key === 'Enter' && handleGroupNameSubmit()}
-                  />
-                  <Button variant="primary" className="py-1 px-3 text-sm" onClick={handleGroupNameSubmit}>
-                    {state.groupName ? '수정' : '명명'}
-                  </Button>
-                  {state.groupName && (
-                    <Button variant="secondary" className="py-1 px-3 text-sm" onClick={() => setIsEditingGroupName(false)}>
-                      취소
-                    </Button>
-                  )}
+    <div className="flex flex-col lg:flex-row gap-6 h-full overflow-y-auto custom-scrollbar pr-2">
+      {/* Left Column: Agency & HR & Marketing */}
+      <div className="flex-1 flex flex-col gap-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <img src={currentStageInfo.imagePlaceholder} alt="Agency" className="w-full h-40 object-cover" />
+          <div className="p-6">
+            <h2 className="font-bold text-2xl mb-2">{currentStageInfo.name}</h2>
+            <p className="text-slate-600 mb-4">{currentStageInfo.description}</p>
+            <div className="flex gap-4">
+              <div className="flex items-center gap-2 text-slate-700 bg-slate-50 p-3 rounded-lg">
+                <Users className="w-5 h-5 text-blue-600" />
+                <span className="font-medium">직원 수: {gameState.employees.length + 1}명</span>
+              </div>
+              {gameState.marketingBuff > 0 && (
+                <div className="flex items-center gap-2 text-orange-700 bg-orange-50 p-3 rounded-lg border border-orange-200">
+                  <Megaphone className="w-5 h-5 text-orange-600" />
+                  <span className="font-bold">마케팅 진행 중 ({gameState.marketingBuff}일 남음)</span>
                 </div>
               )}
             </div>
-          )}
-        </div>
-        
-        {/* Top Stats Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-4 gap-4">
-          <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-l-4 border-l-chaebol-gold">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-slate-800 rounded-lg shrink-0"><TrendingUp className="text-chaebol-gold" size={20} /></div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs text-slate-400 whitespace-nowrap">총 자산 (순자산)</p>
-                <p className="text-lg font-bold font-mono truncate" title={formatCurrency(netWorth)}>{formatCurrency(netWorth)}</p>
-              </div>
-            </div>
-          </Card>
-          
-          <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-l-4 border-l-green-500">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-slate-800 rounded-lg shrink-0"><Wallet className="text-green-500" size={20} /></div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs text-slate-400 whitespace-nowrap">유동 자산 (현금)</p>
-                <p className="text-lg font-bold font-mono truncate" title={formatCurrency(state.cash)}>{formatCurrency(state.cash)}</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-l-4 border-l-blue-500">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-slate-800 rounded-lg shrink-0"><Briefcase className="text-blue-500" size={20} /></div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs text-slate-400 whitespace-nowrap">계열사</p>
-                <p className="text-lg font-bold font-mono truncate">{acquiredCompaniesCount} / {state.companies.length}</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-l-4 border-l-purple-500">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-slate-800 rounded-lg shrink-0"><Building className="text-purple-500" size={20} /></div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs text-slate-400 whitespace-nowrap">부동산 (부지 / 건물)</p>
-                <p className="text-lg font-bold font-mono truncate">{ownedLandCount}개 / {builtCount}채</p>
-              </div>
-            </div>
-          </Card>
+          </div>
         </div>
 
-        {/* Chart Section */}
-        <Card className="h-80">
-          <h3 className="text-lg font-semibold mb-4">자산 성장 추이 (랭킹)</h3>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={state.netWorthHistory}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis 
-                dataKey="tick" 
-                stroke="#94a3b8" 
-                tick={{fill: '#94a3b8'}} 
-                tickFormatter={(value) => {
-                  const info = getGameTimeInfo(value);
-                  return `${info.dateStr.slice(6)} ${info.timeStr}`;
-                }}
-              />
-              <YAxis 
-                stroke="#94a3b8" 
-                tick={{fill: '#94a3b8'}} 
-                tickFormatter={(value) => `₩${(value / 1000000).toFixed(0)}M`}
-                width={80}
-              />
-              <Tooltip 
-                contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }}
-                formatter={(value: number, name: string, props: any) => {
-                  if (name === '내 자산') return [formatCurrency(value), '내 자산'];
-                  if (name === '1위') return [formatCurrency(value), `1위 (${props.payload.top1Name || '-'})`];
-                  if (name === '2위') return [formatCurrency(value), `2위 (${props.payload.top2Name || '-'})`];
-                  if (name === '3위') return [formatCurrency(value), `3위 (${props.payload.top3Name || '-'})`];
-                  return [formatCurrency(value), name];
-                }}
-                labelFormatter={(label) => getGameTimeInfo(Number(label)).fullStr}
-              />
-              <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-              <Line type="monotone" dataKey="value" name="내 자산" stroke="#fbbf24" strokeWidth={3} dot={false} />
-              <Line type="monotone" dataKey="top1Value" name="1위" stroke="#cbd5e1" strokeWidth={2} dot={false} strokeDasharray="4 4" />
-              <Line type="monotone" dataKey="top2Value" name="2위" stroke="#b45309" strokeWidth={2} dot={false} strokeDasharray="4 4" />
-              <Line type="monotone" dataKey="top3Value" name="3위" stroke="#475569" strokeWidth={2} dot={false} strokeDasharray="4 4" />
-            </LineChart>
-          </ResponsiveContainer>
-        </Card>
-
-        {/* Portfolio Breakdown */}
-        <div className="grid grid-cols-1 xl:grid-cols-1 2xl:grid-cols-2 gap-6">
-          <div className="space-y-6">
-            <Card>
-              <h3 className="text-lg font-semibold mb-4 border-b border-slate-700 pb-2">주식 포트폴리오</h3>
-              <div className="space-y-3">
-                {state.companies.filter(c => c.playerShares > 0).length > 0 ? (
-                  state.companies.filter(c => c.playerShares > 0).map(c => (
-                    <div key={c.id} className="flex justify-between items-center">
-                      <div className="min-w-0 flex-1 mr-4">
-                        <p className="font-medium truncate" title={c.name}>{c.name}</p>
-                        <p className="text-xs text-slate-400">{c.playerShares.toLocaleString()} 주</p>
-                      </div>
-                      <p className="font-mono shrink-0">{formatCurrency(c.playerShares * c.stockPrice)}</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* HR Section */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+            <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><UserPlus className="w-5 h-5 text-indigo-600"/> 인사 관리</h3>
+            <button onClick={hireEmployee} className="w-full py-2 bg-indigo-50 text-indigo-700 rounded-lg font-bold hover:bg-indigo-100 transition-colors mb-4">
+              신규 직원 채용 (테스트: 무료)
+            </button>
+            <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
+              {gameState.employees.length === 0 ? <p className="text-sm text-slate-400 text-center py-2">고용된 직원이 없습니다.</p> : 
+                gameState.employees.map(emp => (
+                  <div key={emp.id} className="flex justify-between items-center text-sm p-2 bg-slate-50 rounded-lg">
+                    <div>
+                      <span className="font-bold">{emp.name}</span> <span className="text-slate-500 text-xs">{emp.levelName}</span>
+                      <p className="text-xs text-indigo-600">{emp.role}</p>
                     </div>
-                  ))
-                ) : (
-                  <p className="text-slate-500 text-sm">보유 중인 주식이 없습니다.</p>
-                )}
-              </div>
-            </Card>
-
-            <Card>
-              <h3 className="text-lg font-semibold mb-4 border-b border-slate-700 pb-2">대출 현황</h3>
-              {state.loanAmount > 0 ? (
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">대출 잔액</span>
-                    <span className="font-mono text-red-400 font-bold">{formatCurrency(state.loanAmount)}</span>
+                    <span className="text-slate-500">급여: 2,000,000원</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">만기일</span>
-                    <span className="font-mono text-slate-200">{state.loanDueDate}일차</span>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-slate-500 text-sm">이용 중인 대출이 없습니다.</p>
-              )}
-            </Card>
+                ))
+              }
+            </div>
           </div>
 
-          <div className="space-y-6">
-            <Card>
-              <h3 className="text-lg font-semibold mb-4 border-b border-slate-700 pb-2">부동산 보유 현황</h3>
-              <div className="space-y-3">
-                {state.districts.filter(d => d.owner === 'Player' || d.buildings.some(b => b.ownerType === 'Player')).length > 0 ? (
-                  state.districts.filter(d => d.owner === 'Player' || d.buildings.some(b => b.ownerType === 'Player')).map(d => {
-                    const myBuildings = d.buildings.filter(b => b.ownerType === 'Player');
-                    return (
-                      <div key={d.id} className="flex justify-between items-center">
-                        <div className="min-w-0 flex-1 mr-4">
-                          <p className="font-medium truncate" title={d.name}>
-                            {d.name} {d.owner === 'Player' && <span className="text-xs text-green-400">(내 부지)</span>}
-                          </p>
-                          <p className="text-xs text-slate-400 truncate" title={myBuildings.length > 0 ? myBuildings.map(b => b.type).join(', ') : '건물 없음'}>
-                            {myBuildings.length > 0 ? myBuildings.map(b => b.type).join(', ') : '건물 없음'}
-                          </p>
-                        </div>
-                        <p className="font-mono shrink-0">{formatCurrency(d.owner === 'Player' ? d.landPrice : 0)}</p>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <p className="text-slate-500 text-sm">보유 중인 부동산이 없습니다.</p>
-                )}
-              </div>
-            </Card>
+          {/* Marketing Section */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+            <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Megaphone className="w-5 h-5 text-orange-600"/> 마케팅</h3>
+            <p className="text-sm text-slate-600 mb-4">광고를 통해 3일간 고객 의뢰 수와 VIP 등장 확률을 대폭 증가시킵니다.</p>
+            <button onClick={buyMarketing} disabled={gameState.marketingBuff > 0} className="w-full py-2 bg-orange-50 text-orange-700 rounded-lg font-bold hover:bg-orange-100 transition-colors disabled:opacity-50">
+              {gameState.marketingBuff > 0 ? '캠페인 진행 중' : `광고 캠페인 시작 (테스트: 무료)`}
+            </button>
+          </div>
+        </div>
 
-            <Card>
-              <h3 className="text-lg font-semibold mb-4 border-b border-slate-700 pb-2">예금 현황</h3>
-              <div className="space-y-3">
-                {state.deposits.length > 0 ? (
-                  state.deposits.map(dep => (
-                    <div key={dep.id} className="flex justify-between items-center">
-                      <div className="min-w-0 flex-1 mr-4">
-                        <p className="font-medium truncate" title={dep.name}>{dep.name}</p>
-                        <p className="text-xs text-slate-400">연 {dep.appliedRate.toFixed(2)}%</p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className="font-mono text-green-400 font-bold">{formatCurrency(dep.principal + dep.interestEarned)}</p>
-                        <p className="text-[10px] text-slate-500">원금 {formatCurrency(dep.principal)}</p>
-                      </div>
+        {/* Reviews Section */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+          <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-green-600"/> 고객 후기</h3>
+          <div className="space-y-3 max-h-48 overflow-y-auto custom-scrollbar">
+            {reviews.length === 0 ? <p className="text-sm text-slate-400 text-center py-4">아직 등록된 후기가 없습니다.</p> : 
+              reviews.map(rev => (
+                <div key={rev.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-bold text-sm">{rev.customerName}</span>
+                    <div className="flex">
+                      {[...Array(5)].map((_, i) => <Star key={i} className={`w-3 h-3 ${i < rev.rating ? 'text-yellow-400 fill-yellow-400' : 'text-slate-300'}`} />)}
                     </div>
-                  ))
-                ) : (
-                  <p className="text-slate-500 text-sm">가입된 예금 상품이 없습니다.</p>
-                )}
-              </div>
-            </Card>
+                  </div>
+                  <p className="text-sm text-slate-600">"{rev.comment}"</p>
+                  <p className="text-xs text-slate-400 mt-1">{formatGameDateShort(rev.day)}</p>
+                </div>
+              ))
+            }
           </div>
         </div>
       </div>
 
-      {/* Right: Lobby Chat Panel */}
-      <Card className="w-full xl:w-80 shrink-0 flex flex-col h-[500px] xl:h-full border-blue-900/50 shadow-[0_0_15px_rgba(59,130,246,0.1)]">
-        <div className="flex items-center gap-2 mb-3 border-b border-slate-700 pb-3">
-          <MessageSquare className="text-blue-400" size={20} />
-          <h3 className="text-lg font-bold">로비 채팅</h3>
-        </div>
-        
-        <div className="mb-3">
-          <p className="text-xs text-slate-400 mb-2">접속 중인 회원 ({state.connectedUsers.length + 1}명)</p>
-          <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto custom-scrollbar">
-            <Badge variant="success">{state.currentUser} (나)</Badge>
-            {state.connectedUsers.map(u => <Badge key={u} variant="info">{u}</Badge>)}
-          </div>
+      {/* Right Column: Stats & Upgrades */}
+      <div className="w-full lg:w-96 flex flex-col gap-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+          <h2 className="font-bold text-xl mb-6 flex items-center gap-2">
+            <TrendingUp className="w-6 h-6 text-blue-600" />
+            대표 능력치
+          </h2>
+          
+          <StatBar icon={<Brain className="w-5 h-5 text-purple-500" />} label="지력" value={gameState.stats.intelligence} colorClass="bg-purple-500" description={STAT_DESCRIPTIONS.intelligence} />
+          <StatBar icon={<Heart className="w-5 h-5 text-red-500" />} label="체력" value={gameState.stats.stamina} colorClass="bg-red-500" description={STAT_DESCRIPTIONS.stamina} />
+          <StatBar icon={<Award className="w-5 h-5 text-yellow-500" />} label="매력" value={gameState.stats.charm} colorClass="bg-yellow-500" description={STAT_DESCRIPTIONS.charm} />
+          <StatBar icon={<Star className="w-5 h-5 text-blue-500" />} label="명성" value={gameState.stats.reputation} maxValue={20000} colorClass="bg-blue-500" description={STAT_DESCRIPTIONS.reputation} />
         </div>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 mb-4 p-3 bg-slate-900/50 rounded-lg border border-slate-800">
-          {state.chatMessages.map(msg => (
-            <div key={msg.id} className={`flex flex-col ${msg.sender === state.currentUser ? 'items-end' : 'items-start'}`}>
-              {!msg.isSystem && <span className="text-[10px] text-slate-500 mb-0.5 px-1">{msg.sender}</span>}
-              <div className={`
-                inline-block px-3 py-2 rounded-lg text-sm max-w-[90%] break-words
-                ${msg.isSystem ? 'bg-slate-800 text-slate-400 w-full text-center text-xs' : 
-                  msg.sender === state.currentUser ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-slate-700 text-slate-200 rounded-tl-none'}
-              `}>
-                {msg.text}
+        {/* Agency Upgrade */}
+        {nextStageInfo && (
+          <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl shadow-sm p-6 text-white">
+            <h2 className="font-bold text-xl mb-2 flex items-center gap-2">
+              <Building2 className="w-6 h-6" />
+              여행사 확장
+            </h2>
+            <p className="text-blue-100 mb-6">다음 단계: {nextStageInfo.name}</p>
+            
+            <div className="space-y-3 mb-6 bg-white/10 p-4 rounded-xl">
+              <div className="flex justify-between items-center">
+                <span>필요 자금:</span>
+                <span className="font-bold text-green-300">무시 (테스트)</span>
               </div>
-              {!msg.isSystem && <div className="text-[9px] text-slate-600 mt-0.5 px-1">{msg.timestamp}</div>}
+              <div className="flex justify-between items-center">
+                <span>필요 명성:</span>
+                <span className="font-bold text-green-300">무시 (테스트)</span>
+              </div>
             </div>
-          ))}
-          <div ref={chatEndRef} />
-        </div>
 
-        <form onSubmit={handleSend} className="flex gap-2 mt-auto">
-          <input
-            type="text"
-            value={chatInput}
-            onChange={e => setChatInput(e.target.value)}
-            className="flex-1 min-w-0 bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 transition-colors"
-            placeholder="메시지를 입력하세요..."
-          />
-          <Button variant="primary" className="px-4 py-2 text-sm whitespace-nowrap shrink-0" onClick={() => {}}>
-            전송
-          </Button>
-        </form>
-      </Card>
-
+            <button
+              onClick={upgradeAgency}
+              className="w-full py-3 bg-white text-blue-700 rounded-xl font-bold hover:bg-blue-50 transition-colors"
+            >
+              확장하기 (테스트: 무료)
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
