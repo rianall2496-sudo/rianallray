@@ -1,203 +1,392 @@
 import React, { useState } from 'react';
-import { Company, MarketType } from '../types';
-import { formatCurrency } from '../constants';
-import { Card, Badge } from './ui';
-import { TrendingUp, TrendingDown, Activity, Building2 } from 'lucide-react';
-import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
+import { MarketItem, GameState, InventoryItem, ItemType } from '../types.ts';
+import { formatMoney, generateId, formatGameDateShort, formatDuration } from '../utils.ts';
+import { Plane, Building, Ticket, TrendingUp, TrendingDown, Search, Clock, Car } from 'lucide-react';
 
 interface MarketProps {
-  companies: Company[];
-  cash: number;
-  onBuy: (companyId: string, amount: number) => void;
-  onSell: (companyId: string, amount: number) => void;
+  marketItems: MarketItem[];
+  setMarketItems: React.Dispatch<React.SetStateAction<MarketItem[]>>;
+  gameState: GameState;
+  setGameState: React.Dispatch<React.SetStateAction<GameState>>;
+  setInventory: React.Dispatch<React.SetStateAction<InventoryItem[]>>;
+  addLog: (msg: string, type: 'info' | 'success' | 'error' | 'warning') => void;
 }
 
-export const Market: React.FC<MarketProps> = ({ companies, cash, onBuy, onSell }) => {
-  const [marketView, setMarketView] = useState<MarketType>('KOSDAQ');
-  const [selectedCompany, setSelectedCompany] = useState<Company | null>(companies[0]);
-  const [tradeAmount, setTradeAmount] = useState<number>(10);
+export const Market: React.FC<MarketProps> = ({ marketItems, setMarketItems, gameState, setGameState, setInventory, addLog }) => {
+  const [activeType, setActiveType] = useState<ItemType>('flight');
+  const [flightRouteType, setFlightRouteType] = useState<'all' | 'domestic' | 'international'>('all');
+  const [sortConfig, setSortConfig] = useState<{ key: keyof MarketItem; direction: 'asc' | 'desc' }>({ key: 'departureDay', direction: 'asc' });
+  
+  // Search states for Flights
+  const [departureSearch, setDepartureSearch] = useState('');
+  const [arrivalSearch, setArrivalSearch] = useState('');
 
-  const filteredCompanies = companies.filter(c => c.marketType === marketView);
+  // Search states for Hotels
+  const [hotelDestSearch, setHotelDestSearch] = useState('');
+  const [hotelProviderSearch, setHotelProviderSearch] = useState('');
 
-  const handleTabChange = (view: MarketType) => {
-    setMarketView(view);
-    const firstInView = companies.find(c => c.marketType === view);
-    setSelectedCompany(firstInView || null);
+  // Search states for Attractions
+  const [attrDestSearch, setAttrDestSearch] = useState('');
+  const [attrProviderSearch, setAttrProviderSearch] = useState('');
+
+  // Search states for Rental Cars
+  const [carDestSearch, setCarDestSearch] = useState('');
+  const [carProviderSearch, setCarProviderSearch] = useState('');
+
+  const handleBuy = (itemId: string, amount: number) => {
+    const item = marketItems.find(i => i.id === itemId);
+    if (!item) return;
+    const cost = item.currentPrice * amount;
+    
+    if (gameState.money < cost) {
+      addLog("자금이 부족합니다.", "error");
+      return;
+    }
+    
+    setGameState(prev => ({ ...prev, money: prev.money - cost }));
+    setMarketItems(prev => prev.map(i => i.id === itemId ? { ...i, availableStock: i.availableStock - amount } : i));
+    
+    setInventory(prev => {
+      const existing = prev.find(i => i.marketId === itemId);
+      if (existing) {
+        const newTotal = existing.stockOwned + amount;
+        const newAvgPrice = ((existing.stockOwned * existing.averagePurchasePrice) + cost) / newTotal;
+        return prev.map(i => i.marketId === itemId ? { ...i, stockOwned: newTotal, averagePurchasePrice: newAvgPrice } : i);
+      } else {
+        return [...prev, {
+          id: generateId(),
+          marketId: item.id,
+          type: item.type,
+          provider: item.provider,
+          destination: item.destination,
+          country: item.country,
+          isDomestic: item.isDomestic,
+          departureAirport: item.departureAirport,
+          arrivalAirport: item.arrivalAirport,
+          departureDay: item.departureDay,
+          departureTime: item.departureTime,
+          arrivalTime: item.arrivalTime,
+          flightTime: item.flightTime,
+          isReturn: item.isReturn,
+          stockOwned: amount,
+          averagePurchasePrice: item.currentPrice
+        }];
+      }
+    });
+    
+    const typeName = item.type === 'flight' ? '항공권' : item.type === 'hotel' ? '호텔 객실' : item.type === 'attraction' ? '관광지 티켓' : '렌터카';
+    addLog(`[구매] ${item.destination} ${typeName} ${amount}개 구매 완료 (-${formatMoney(cost)})`, "success");
   };
 
-  const handleCompanySelect = (company: Company) => {
-    setSelectedCompany(company);
-  };
+  let filteredItems = marketItems.filter(i => i.type === activeType);
 
-  const currentSelectedCompany = selectedCompany ? companies.find(c => c.id === selectedCompany.id) : null;
+  // Apply search filters based on active type
+  if (activeType === 'flight') {
+    if (flightRouteType === 'domestic') filteredItems = filteredItems.filter(i => i.isDomestic);
+    if (flightRouteType === 'international') filteredItems = filteredItems.filter(i => !i.isDomestic);
+
+    if (departureSearch.trim()) {
+      filteredItems = filteredItems.filter(i => 
+        i.departureAirport?.toLowerCase().includes(departureSearch.trim().toLowerCase())
+      );
+    }
+    if (arrivalSearch.trim()) {
+      const term = arrivalSearch.trim().toLowerCase();
+      filteredItems = filteredItems.filter(i => 
+        i.arrivalAirport?.toLowerCase().includes(term) || 
+        i.destination.toLowerCase().includes(term) ||
+        i.country?.toLowerCase().includes(term)
+      );
+    }
+  } else if (activeType === 'hotel') {
+    if (hotelDestSearch.trim()) {
+      const term = hotelDestSearch.trim().toLowerCase();
+      filteredItems = filteredItems.filter(i => 
+        i.destination.toLowerCase().includes(term) ||
+        i.country?.toLowerCase().includes(term)
+      );
+    }
+    if (hotelProviderSearch.trim()) {
+      filteredItems = filteredItems.filter(i => 
+        i.provider.toLowerCase().includes(hotelProviderSearch.trim().toLowerCase())
+      );
+    }
+  } else if (activeType === 'attraction') {
+    if (attrDestSearch.trim()) {
+      const term = attrDestSearch.trim().toLowerCase();
+      filteredItems = filteredItems.filter(i => 
+        i.destination.toLowerCase().includes(term) ||
+        i.country?.toLowerCase().includes(term)
+      );
+    }
+    if (attrProviderSearch.trim()) {
+      filteredItems = filteredItems.filter(i => 
+        i.provider.toLowerCase().includes(attrProviderSearch.trim().toLowerCase())
+      );
+    }
+  } else if (activeType === 'rental_car') {
+    if (carDestSearch.trim()) {
+      const term = carDestSearch.trim().toLowerCase();
+      filteredItems = filteredItems.filter(i => 
+        i.destination.toLowerCase().includes(term) ||
+        i.country?.toLowerCase().includes(term)
+      );
+    }
+    if (carProviderSearch.trim()) {
+      filteredItems = filteredItems.filter(i => 
+        i.provider.toLowerCase().includes(carProviderSearch.trim().toLowerCase())
+      );
+    }
+  }
+
+  const sortedItems = [...filteredItems].sort((a, b) => {
+    if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const requestSort = (key: keyof MarketItem) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
-      {/* Company List */}
-      <div className="lg:col-span-1 flex flex-col h-full overflow-hidden">
-        <h2 className="text-xl font-bold mb-4 flex items-center gap-2 shrink-0"><Activity className="text-blue-400"/> 서울 거래소</h2>
-        
-        {/* Market Tabs */}
-        <div className="flex gap-2 mb-4 shrink-0">
-          <button 
-            onClick={() => handleTabChange('KOSDAQ')} 
-            className={`flex-1 py-2 rounded-lg font-bold transition-colors ${marketView === 'KOSDAQ' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-          >
-            KOSDAQ
-          </button>
-          <button 
-            onClick={() => handleTabChange('KOSPI')} 
-            className={`flex-1 py-2 rounded-lg font-bold transition-colors ${marketView === 'KOSPI' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-          >
-            KOSPI
-          </button>
+    <div className="h-full flex flex-col">
+      <div className="mb-4 flex justify-between items-center">
+        <h2 className="text-xl font-bold flex items-center gap-2">
+          <Plane className="w-6 h-6 text-blue-600" />
+          B2B 거래소
+        </h2>
+        <div className="flex gap-2 bg-slate-100 p-1 rounded-lg">
+          <button onClick={() => setActiveType('flight')} className={`px-4 py-1.5 rounded-md text-sm font-bold flex items-center gap-2 ${activeType === 'flight' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500'}`}><Plane className="w-4 h-4"/> 항공권</button>
+          <button onClick={() => setActiveType('hotel')} className={`px-4 py-1.5 rounded-md text-sm font-bold flex items-center gap-2 ${activeType === 'hotel' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}><Building className="w-4 h-4"/> 호텔</button>
+          <button onClick={() => setActiveType('attraction')} className={`px-4 py-1.5 rounded-md text-sm font-bold flex items-center gap-2 ${activeType === 'attraction' ? 'bg-white shadow-sm text-orange-600' : 'text-slate-500'}`}><Ticket className="w-4 h-4"/> 관광지</button>
+          <button onClick={() => setActiveType('rental_car')} className={`px-4 py-1.5 rounded-md text-sm font-bold flex items-center gap-2 ${activeType === 'rental_car' ? 'bg-white shadow-sm text-teal-600' : 'text-slate-500'}`}><Car className="w-4 h-4"/> 렌터카</button>
         </div>
+      </div>
 
-        <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar flex-1 pb-4">
-          {filteredCompanies.length === 0 ? (
-            <div className="text-center text-slate-500 py-8">
-              현재 이 시장에 상장된 기업이 없습니다.
+      {/* Search Bar for Flights */}
+      {activeType === 'flight' && (
+        <div className="flex flex-col gap-3 mb-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+          <div className="flex gap-2">
+            <button onClick={() => setFlightRouteType('all')} className={`px-3 py-1 rounded-md text-xs font-bold ${flightRouteType === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>전체 노선</button>
+            <button onClick={() => setFlightRouteType('domestic')} className={`px-3 py-1 rounded-md text-xs font-bold ${flightRouteType === 'domestic' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>국내선</button>
+            <button onClick={() => setFlightRouteType('international')} className={`px-3 py-1 rounded-md text-xs font-bold ${flightRouteType === 'international' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>국제선</button>
+          </div>
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="block text-xs font-bold text-slate-500 mb-1">출발지 검색</label>
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="예: 인천, 김포"
+                  value={departureSearch}
+                  onChange={(e) => setDepartureSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-300 focus:outline-none focus:border-blue-500 text-sm"
+                />
+              </div>
             </div>
-          ) : (
-            filteredCompanies.map(c => {
-              const isOwned = (c.playerShares / c.totalShares) >= 0.51;
-              const priceChange = c.history.length > 1 ? c.stockPrice - c.history[c.history.length - 2] : 0;
-              const isUp = priceChange >= 0;
+            <div className="flex-1">
+              <label className="block text-xs font-bold text-slate-500 mb-1">도착지 검색</label>
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="예: 미국, 도쿄, 나리타, 제주"
+                  value={arrivalSearch}
+                  onChange={(e) => setArrivalSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-300 focus:outline-none focus:border-blue-500 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
-              return (
-                <Card 
-                  key={c.id} 
-                  className={`cursor-pointer transition-all hover:border-blue-500 ${currentSelectedCompany?.id === c.id ? 'border-blue-500 bg-slate-800' : ''}`}
-                >
-                  <div onClick={() => handleCompanySelect(c)}>
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex gap-3 items-center">
-                        {c.imageUrl ? (
-                          <img src={c.imageUrl} alt={c.name} className="w-10 h-10 rounded-md object-cover border border-slate-600" />
-                        ) : (
-                          <div className="w-10 h-10 rounded-md bg-slate-700 flex items-center justify-center border border-slate-600">
-                            <Building2 size={20} className="text-slate-400" />
-                          </div>
-                        )}
-                        <div>
-                          <h3 className="font-bold text-lg">{c.name}</h3>
-                          <div className="flex gap-2 mt-1">
-                            <Badge variant="info">{c.sector}</Badge>
-                            <Badge variant="warning">발행주: {c.totalShares.toLocaleString()}주</Badge>
-                          </div>
+      {/* Search Bar for Hotels */}
+      {activeType === 'hotel' && (
+        <div className="flex gap-4 mb-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+          <div className="flex-1">
+            <label className="block text-xs font-bold text-slate-500 mb-1">목적지/국가 검색</label>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="예: 일본, 파리, 제주"
+                value={hotelDestSearch}
+                onChange={(e) => setHotelDestSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-300 focus:outline-none focus:border-indigo-500 text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex-1">
+            <label className="block text-xs font-bold text-slate-500 mb-1">호텔명 검색</label>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="예: 힐튼, 메리어트"
+                value={hotelProviderSearch}
+                onChange={(e) => setHotelProviderSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-300 focus:outline-none focus:border-indigo-500 text-sm"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Search Bar for Attractions */}
+      {activeType === 'attraction' && (
+        <div className="flex gap-4 mb-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+          <div className="flex-1">
+            <label className="block text-xs font-bold text-slate-500 mb-1">목적지/국가 검색</label>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="예: 미국, 오사카"
+                value={attrDestSearch}
+                onChange={(e) => setAttrDestSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-300 focus:outline-none focus:border-orange-500 text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex-1">
+            <label className="block text-xs font-bold text-slate-500 mb-1">관광지명 검색</label>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="예: 디즈니랜드, 루브르"
+                value={attrProviderSearch}
+                onChange={(e) => setAttrProviderSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-300 focus:outline-none focus:border-orange-500 text-sm"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Search Bar for Rental Cars */}
+      {activeType === 'rental_car' && (
+        <div className="flex gap-4 mb-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+          <div className="flex-1">
+            <label className="block text-xs font-bold text-slate-500 mb-1">목적지/국가 검색</label>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="예: 제주, 미국"
+                value={carDestSearch}
+                onChange={(e) => setCarDestSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-300 focus:outline-none focus:border-teal-500 text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex-1">
+            <label className="block text-xs font-bold text-slate-500 mb-1">렌터카 업체 검색</label>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="예: 허츠, 롯데렌터카"
+                value={carProviderSearch}
+                onChange={(e) => setCarProviderSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-300 focus:outline-none focus:border-teal-500 text-sm"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex-1 overflow-auto custom-scrollbar border border-slate-200 rounded-xl">
+        <table className="w-full text-sm text-left">
+          <thead className="bg-slate-50 text-slate-700 sticky top-0 z-10 shadow-sm">
+            <tr>
+              <th className="p-4 cursor-pointer hover:bg-slate-100" onClick={() => requestSort('departureDay')}>일정</th>
+              <th className="p-4 cursor-pointer hover:bg-slate-100" onClick={() => requestSort('provider')}>제공자({activeType === 'flight' ? '항공사' : activeType === 'hotel' ? '호텔' : activeType === 'attraction' ? '관광지' : '렌터카'})</th>
+              <th className="p-4 cursor-pointer hover:bg-slate-100" onClick={() => requestSort('destination')}>목적지/노선</th>
+              {activeType === 'flight' && <th className="p-4">비행 시간</th>}
+              <th className="p-4 cursor-pointer hover:bg-slate-100" onClick={() => requestSort('availableStock')}>잔여 수량</th>
+              <th className="p-4 cursor-pointer hover:bg-slate-100" onClick={() => requestSort('currentPrice')}>현재가</th>
+              <th className="p-4">구매</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {sortedItems.length === 0 ? (
+              <tr><td colSpan={activeType === 'flight' ? 7 : 6} className="p-8 text-center text-slate-500">검색 결과 또는 거래 가능한 상품이 없습니다.</td></tr>
+            ) : (
+              sortedItems.map(item => (
+                <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="p-4 font-medium">{formatGameDateShort(item.departureDay)}</td>
+                  <td className="p-4">{item.provider}</td>
+                  <td className="p-4 font-bold text-slate-900">
+                    {item.type === 'flight' ? (
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-slate-500">{item.isReturn ? '[귀국편]' : '[출국편]'} [{item.country}] {item.destination}</span>
+                        <div className="flex items-center gap-1 text-sm font-bold">
+                          <span>{item.departureAirport}</span>
+                          <Plane className="w-3 h-3 text-slate-400" />
+                          <span>{item.arrivalAirport}</span>
                         </div>
                       </div>
-                      {isOwned && <Badge variant="success">계열사</Badge>}
-                    </div>
-                    <div className="flex justify-between items-end mt-4">
-                      <div>
-                        <p className="text-sm text-slate-400">주가</p>
-                        <p className="font-mono text-lg">{formatCurrency(c.stockPrice)}</p>
+                    ) : (
+                      `[${item.country}] ${item.destination}`
+                    )}
+                  </td>
+                  {activeType === 'flight' && (
+                    <td className="p-4">
+                      <div className="flex flex-col text-xs text-slate-600">
+                        <span className="font-bold text-slate-800">{item.departureTime} ➔ {item.arrivalTime}</span>
+                        <span className="flex items-center gap-1"><Clock className="w-3 h-3"/> {formatDuration(item.flightTime || 0)}</span>
                       </div>
-                      <div className={`flex items-center ${isUp ? 'text-red-400' : 'text-blue-400'}`}>
-                        {isUp ? <TrendingUp size={16} className="mr-1"/> : <TrendingDown size={16} className="mr-1"/>}
-                        <span className="text-sm">{Math.abs(priceChange / (c.stockPrice - priceChange) * 100).toFixed(2)}%</span>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      {/* Trading Desk */}
-      <div className="lg:col-span-2 flex flex-col gap-6 h-full overflow-y-auto custom-scrollbar pr-2">
-        {currentSelectedCompany ? (
-          <>
-            <Card className="flex-1 flex flex-col min-h-[500px]">
-              <div className="flex justify-between items-center mb-6">
-                <div className="flex items-center gap-4">
-                  {currentSelectedCompany.imageUrl && (
-                    <img src={currentSelectedCompany.imageUrl} alt={currentSelectedCompany.name} className="w-16 h-16 rounded-lg object-cover border border-slate-600 shadow-md" />
+                    </td>
                   )}
-                  <div>
-                    <div className="flex items-center gap-3 mb-1">
-                      <h2 className="text-2xl font-bold">{currentSelectedCompany.name}</h2>
-                      <Badge variant={currentSelectedCompany.marketType === 'KOSPI' ? 'warning' : 'info'}>
-                        {currentSelectedCompany.marketType}
-                      </Badge>
+                  <td className="p-4">{item.availableStock}개</td>
+                  <td className="p-4">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-blue-600">{formatMoney(item.currentPrice)}</span>
+                      {item.currentPrice > item.basePrice ? <TrendingUp className="w-4 h-4 text-red-500" /> : <TrendingDown className="w-4 h-4 text-green-500" />}
                     </div>
-                    <p className="text-slate-400">{currentSelectedCompany.sector} 섹터</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm text-slate-400">현재가</p>
-                  <p className="text-3xl font-mono font-bold text-chaebol-gold">{formatCurrency(currentSelectedCompany.stockPrice)}</p>
-                </div>
-              </div>
-              
-              {/* Mini Chart */}
-              <div className="h-48 w-full mb-6 bg-slate-900/50 rounded-lg p-2 shrink-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={currentSelectedCompany.history.map((p, i) => ({ index: i, price: p }))}>
-                    <YAxis domain={['auto', 'auto']} hide />
-                    <Line type="monotone" dataKey="price" stroke={currentSelectedCompany.marketType === 'KOSPI' ? '#a855f7' : '#3b82f6'} strokeWidth={2} dot={false} isAnimationActive={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mb-6 shrink-0">
-                <div className="bg-slate-900 p-4 rounded-lg">
-                  <p className="text-sm text-slate-400">보유 주식</p>
-                  <p className="text-xl font-mono">{currentSelectedCompany.playerShares.toLocaleString()} / {currentSelectedCompany.totalShares.toLocaleString()}</p>
-                  <p className="text-xs text-slate-500 mt-1">지분율: {((currentSelectedCompany.playerShares / currentSelectedCompany.totalShares) * 100).toFixed(2)}%</p>
-                </div>
-                <div className="bg-slate-900 p-4 rounded-lg">
-                  <p className="text-sm text-slate-400">시가총액</p>
-                  <p className="text-xl font-mono">{formatCurrency(currentSelectedCompany.stockPrice * currentSelectedCompany.totalShares)}</p>
-                </div>
-              </div>
-
-              <div className="mt-auto bg-slate-800 p-4 rounded-lg border border-slate-700 shrink-0">
-                <div className="flex items-center gap-4 mb-4">
-                  <label className="text-sm font-medium w-24">수량:</label>
-                  <input 
-                    type="range" 
-                    min="1" 
-                    max={currentSelectedCompany.totalShares} 
-                    value={tradeAmount} 
-                    onChange={(e) => setTradeAmount(Number(e.target.value))}
-                    className="flex-1 accent-blue-500"
-                  />
-                  <input 
-                    type="number" 
-                    value={tradeAmount}
-                    onChange={(e) => setTradeAmount(Number(e.target.value))}
-                    className="w-24 bg-slate-900 border border-slate-700 rounded p-1 text-center font-mono"
-                  />
-                </div>
-                <div className="flex gap-4">
-                  <button 
-                    className="flex-1 py-3 text-lg px-4 rounded-lg font-semibold transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed bg-red-600 hover:bg-red-700 text-white"
-                    onClick={() => onBuy(currentSelectedCompany.id, tradeAmount)}
-                    disabled={cash < currentSelectedCompany.stockPrice * tradeAmount}
-                  >
-                    매수 ({formatCurrency(currentSelectedCompany.stockPrice * tradeAmount)})
-                  </button>
-                  <button 
-                    className="flex-1 py-3 text-lg px-4 rounded-lg font-semibold transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-700 text-white"
-                    onClick={() => onSell(currentSelectedCompany.id, tradeAmount)}
-                    disabled={currentSelectedCompany.playerShares < tradeAmount}
-                  >
-                    매도 ({formatCurrency(currentSelectedCompany.stockPrice * tradeAmount)})
-                  </button>
-                </div>
-              </div>
-            </Card>
-          </>
-        ) : (
-          <Card className="flex-1 flex items-center justify-center text-slate-500 min-h-[500px]">
-            기업을 선택하여 상세 정보를 확인하고 거래하세요.
-          </Card>
-        )}
+                  </td>
+                  <td className="p-4">
+                    <BuyAction item={item} onBuy={handleBuy} />
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
+    </div>
+  );
+};
+
+const BuyAction: React.FC<{ item: MarketItem, onBuy: (id: string, amount: number) => void }> = ({ item, onBuy }) => {
+  const [amount, setAmount] = useState(1);
+  
+  if (item.availableStock <= 0) return <span className="text-slate-400">매진</span>;
+
+  return (
+    <div className="flex items-center gap-2">
+      <input 
+        type="number" 
+        min="1" 
+        max={item.availableStock} 
+        value={amount} 
+        onChange={e => setAmount(Math.min(item.availableStock, Math.max(1, Number(e.target.value))))} 
+        className="w-16 border border-slate-300 rounded-lg p-1.5 text-center focus:outline-none focus:border-blue-500" 
+      />
+      <button 
+        onClick={() => onBuy(item.id, amount)} 
+        className="bg-blue-600 text-white px-4 py-1.5 rounded-lg hover:bg-blue-700 font-medium transition-colors"
+      >
+        구매
+      </button>
     </div>
   );
 };
