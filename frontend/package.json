@@ -1,5 +1,5 @@
 {
-  "name": "-frontend",
+  "name": "world-tour-tycoon-frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -11,8 +11,7 @@
   "dependencies": {
     "react": "latest",
     "react-dom": "latest",
-    "lucide-react": "latest",
-    "recharts": "latest"
+    "lucide-react": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",
