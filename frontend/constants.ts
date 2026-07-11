@@ -1,151 +1,403 @@
-import { AgencyStageInfo, CustomerType, GameEvent } from './types.ts';
+import { Branch, Subordinate, SpecialApplicant, MercenaryUnit, MapBase } from './types.ts';
 
-export const INITIAL_MONEY = 10000000; // 10 million KRW
-export const INITIAL_STATS = {
-  intelligence: 10,
-  stamina: 10,
-  charm: 10,
-  reputation: 0,
+export const RANKS = [
+  '이병', '일병', '상병', '병장', // 0-3
+  '하사', '중사', '상사', '원사', // 4-7
+  '준위', // 8
+  '소위', '중위', '대위', // 9-11 (Start at 9)
+  '소령', '중령', '대령', // 12-14 (Production unlocks at 12)
+  '준장', '소장', '중장', '대장', // 15-18
+  '원수' // 19
+];
+
+export const getRankIcon = (index: number) => {
+  const icons = [
+    '━', '━━', '━━━', '━━━━', // 0-3: 이병~병장
+    'V', 'VV', 'VVV', '★VVV', // 4-7: 하사~원사
+    '◇', // 8: 준위
+    '◆', '◆◆', '◆◆◆', // 9-11: 소위~대위
+    '❁', '❁❁', '❁❁❁', // 12-14: 소령~대령
+    '★', '★★', '★★★', '★★★★', // 15-18: 준장~대장
+    '★★★★★' // 19: 원수
+  ];
+  return icons[index] || '';
 };
 
-export const AGENCY_STAGES: Record<number, AgencyStageInfo> = {
-  1: { level: 1, name: "동네 여행사", description: "동네 구석의 허름한 사무실. 사장 1명.", reqMoney: 0, reqReputation: 0, imagePlaceholder: "https://picsum.photos/seed/stage1/400/200" },
-  2: { level: 2, name: "중형 여행사", description: "번화가로 진출한 번듯한 사무실.", reqMoney: 50000000, reqReputation: 500, imagePlaceholder: "https://picsum.photos/seed/stage2/400/200" },
-  3: { level: 3, name: "전국 체인 여행사", description: "전국에 지점을 둔 유명 여행사.", reqMoney: 200000000, reqReputation: 2000, imagePlaceholder: "https://picsum.photos/seed/stage3/400/200" },
-  4: { level: 4, name: "기업형 여행사", description: "항공사 및 호텔과 직접 협상하는 대형 기업.", reqMoney: 1000000000, reqReputation: 5000, imagePlaceholder: "https://picsum.photos/seed/stage4/400/200" },
-  5: { level: 5, name: "글로벌 여행 그룹", description: "전 세계 50개국 지사, 항공사/호텔 인수 가능.", reqMoney: 5000000000, reqReputation: 20000, imagePlaceholder: "https://picsum.photos/seed/stage5/400/200" }
+export const STARTING_RANK_INDEX = 9; // 소위 (2nd Lieutenant)
+export const PRODUCTION_UNLOCK_RANK_INDEX = 12; // 소령 (Major)
+
+export const UNIT_SIZES = [
+  { name: '분대 (Squad)', min: 0 },
+  { name: '소대 (Platoon)', min: 36 },
+  { name: '중대 (Company)', min: 108 },
+  { name: '대대 (Battalion)', min: 432 },
+  { name: '연대/여단 (Regiment/Brigade)', min: 1728 },
+  { name: '사단 (Division)', min: 10000 },
+  { name: '군단 (Corps)', min: 40000 },
+  { name: '야전군 (Field Army)', min: 160000 },
+  { name: '총사령부 (Supreme Command)', min: 640000 }
+];
+
+export const getUnitName = (troops: number) => {
+  let currentUnit = UNIT_SIZES[0].name;
+  for (const unit of UNIT_SIZES) {
+    if (troops >= unit.min) {
+      currentUnit = unit.name;
+    } else {
+      break;
+    }
+  }
+  return currentUnit;
 };
 
-export const STAT_NAMES = {
-  intelligence: "지력 (Intelligence)",
-  stamina: "체력 (Stamina)",
-  charm: "매력 (Charm)",
-  reputation: "명성 (Reputation)"
+export const XP_REQUIREMENTS = [
+  0, 100, 250, 500, 800, 1200, 1800, 2500, 3500, 5000, // 0-9
+  7000, 10000, 15000, 22000, 30000, 45000, 60000, 80000, 120000, 200000 // 10-19
+];
+
+export const EQUIPMENT_CATALOG = {
+  [Branch.ARMY]: [
+    { id: 'm16', name: 'M16 소총', cost: 1000000, type: 'WEAPON' },
+    { id: 'mortar', name: '박격포', cost: 5000000, type: 'WEAPON' },
+    { id: 'jeep', name: '군용 짚차', cost: 20000000, type: 'VEHICLE' },
+    { id: 'truck', name: '군용 트럭', cost: 50000000, type: 'VEHICLE' },
+    { id: 'tank', name: 'K2 흑표 전차', cost: 5000000000, type: 'VEHICLE' },
+    { id: 'missile', name: '현무 미사일', cost: 20000000000, type: 'WEAPON' }
+  ],
+  [Branch.NAVY]: [
+    { id: 'patrol', name: '참수리급 고속정', cost: 1000000000, type: 'SHIP' },
+    { id: 'frigate', name: '호위함', cost: 50000000000, type: 'SHIP' },
+    { id: 'destroyer', name: '이지스 구축함', cost: 200000000000, type: 'SHIP' },
+    { id: 'submarine', name: '잠수함', cost: 300000000000, type: 'SHIP' },
+    { id: 'carrier', name: '항공모함', cost: 1000000000000, type: 'SHIP' }
+  ],
+  [Branch.AIR_FORCE]: [
+    { id: 'trainer', name: 'T-50 훈련기', cost: 20000000000, type: 'AIRCRAFT' },
+    { id: 'fighter', name: 'KF-21 전투기', cost: 80000000000, type: 'AIRCRAFT' },
+    { id: 'bomber', name: '폭격기', cost: 150000000000, type: 'AIRCRAFT' },
+    { id: 'awacs', name: '조기경보기', cost: 300000000000, type: 'AIRCRAFT' },
+    { id: 'stealth', name: 'F-35 스텔스기', cost: 120000000000, type: 'AIRCRAFT' }
+  ]
 };
 
-export const STAT_DESCRIPTIONS = {
-  intelligence: "수익 증가 및 실수 감소",
-  stamina: "하루 행동력(의뢰 처리) 증가",
-  charm: "의뢰 성공 확률 증가",
-  reputation: "상위 단계 진급 및 VIP 의뢰 조건"
+export const TRAINING_CATALOG = {
+  [Branch.ARMY]: [
+    { id: 't_army_1', name: '유격 훈련 (Ranger)', durationMs: 2000, minRank: 9, cost: 5000000, baseXp: 150 },
+    { id: 't_army_2', name: '혹한기 전술훈련', durationMs: 2000, minRank: 9, cost: 8000000, baseXp: 200 },
+    { id: 't_army_3', name: '혹서기 전술훈련', durationMs: 2000, minRank: 9, cost: 8000000, baseXp: 200 },
+    { id: 't_army_9', name: '화생방 (CBRN) 훈련', durationMs: 2000, minRank: 9, cost: 3000000, baseXp: 100 },
+    { id: 't_army_6', name: '전차포 실사격 훈련', durationMs: 2000, minRank: 10, cost: 30000000, baseXp: 350 },
+    { id: 't_army_7', name: '도하 훈련 (River Crossing)', durationMs: 2000, minRank: 10, cost: 15000000, baseXp: 250 },
+    { id: 't_army_10', name: '시가지 전투 (CQB)', durationMs: 2000, minRank: 10, cost: 10000000, baseXp: 280 },
+    { id: 't_army_4', name: 'KCTC 과학화 전투훈련', durationMs: 2000, minRank: 11, cost: 50000000, baseXp: 500 },
+    { id: 't_army_5', name: '공수기본훈련 (Airborne)', durationMs: 2000, minRank: 11, cost: 20000000, baseXp: 300 },
+    { id: 't_army_8', name: '대테러 진압 훈련', durationMs: 2000, minRank: 12, cost: 25000000, baseXp: 400 }
+  ],
+  [Branch.NAVY]: [
+    { id: 't_navy_1', name: '해상기동훈련', durationMs: 2000, minRank: 9, cost: 10000000, baseXp: 180 },
+    { id: 't_navy_2', name: '순항훈련', durationMs: 2000, minRank: 9, cost: 15000000, baseXp: 220 },
+    { id: 't_navy_5', name: '혹한기 해상생존훈련', durationMs: 2000, minRank: 9, cost: 8000000, baseXp: 150 },
+    { id: 't_navy_6', name: '함포 실사격 훈련', durationMs: 2000, minRank: 10, cost: 40000000, baseXp: 350 },
+    { id: 't_navy_7', name: '대잠수함 탐색 훈련', durationMs: 2000, minRank: 10, cost: 25000000, baseXp: 300 },
+    { id: 't_navy_8', name: '기뢰 탐색 및 소해', durationMs: 2000, minRank: 10, cost: 20000000, baseXp: 280 },
+    { id: 't_navy_3', name: '잠수함 회피훈련', durationMs: 2000, minRank: 11, cost: 30000000, baseXp: 400 },
+    { id: 't_navy_4', name: 'UDT/SEAL 기초훈련', durationMs: 2000, minRank: 11, cost: 20000000, baseXp: 350 },
+    { id: 't_navy_9', name: '해병대 연합 상륙훈련', durationMs: 2000, minRank: 12, cost: 80000000, baseXp: 600 },
+    { id: 't_navy_10', name: '심해 잠수 구조훈련', durationMs: 2000, minRank: 12, cost: 35000000, baseXp: 450 }
+  ],
+  [Branch.AIR_FORCE]: [
+    { id: 't_air_2', name: '비상대기 훈련', durationMs: 2000, minRank: 9, cost: 5000000, baseXp: 150 },
+    { id: 't_air_3', name: '방공포병 사격훈련', durationMs: 2000, minRank: 9, cost: 15000000, baseXp: 200 },
+    { id: 't_air_5', name: '혹서기 기지방호훈련', durationMs: 2000, minRank: 9, cost: 8000000, baseXp: 180 },
+    { id: 't_air_6', name: '야간 전술비행 훈련', durationMs: 2000, minRank: 10, cost: 30000000, baseXp: 350 },
+    { id: 't_air_7', name: '공중급유 훈련', durationMs: 2000, minRank: 10, cost: 40000000, baseXp: 380 },
+    { id: 't_air_8', name: '정밀타격(JDAM) 훈련', durationMs: 2000, minRank: 10, cost: 50000000, baseXp: 450 },
+    { id: 't_air_4', name: '생환훈련 (Survival)', durationMs: 2000, minRank: 11, cost: 10000000, baseXp: 300 },
+    { id: 't_air_1', name: '레드플래그 (Red Flag)', durationMs: 2000, minRank: 11, cost: 100000000, baseXp: 800 },
+    { id: 't_air_9', name: '전자전(EW) 대응 훈련', durationMs: 2000, minRank: 12, cost: 60000000, baseXp: 500 },
+    { id: 't_air_10', name: '탐색구조(SAR) 훈련', durationMs: 2000, minRank: 12, cost: 35000000, baseXp: 400 }
+  ]
 };
 
-export const UPGRADE_COST_BASE = 1000000;
-
-export const AIRLINES = [
-  "대한항공", "아시아나항공", "제주항공", "진에어", "티웨이항공", "에어부산", "에어서울", "이스타항공", "피치항공", "ANA",
-  "JAL", "에바항공", "중화항공", "캐세이퍼시픽", "홍콩익스프레스", "중국동방항공", "중국남방항공", "에어아시아", "싱가포르항공", "타이항공",
-  "베트남항공", "비엣젯항공", "필리핀항공", "세부퍼시픽", "가루다인도네시아", "말레이시아항공", "콴타스항공", "에어뉴질랜드", "델타항공", "유나이티드항공",
-  "아메리칸항공", "에어캐나다", "하와이안항공", "에어프랑스", "루프트한자", "영국항공", "KLM독일항공", "핀에어", "알리탈리아", "아에로플로트",
-  "에미레이트항공", "카타르항공", "에티하드항공", "터키항공", "사우디아항공", "에어인디아", "LATAM", "아비앙카", "에티오피아항공", "플레이어항공"
-];
-
-export const HOTELS = [
-  "힐튼", "메리어트", "인터컨티넨탈", "하얏트", "아코르", "포시즌스", "샹그릴라", "만다린 오리엔탈", "페닌슐라", "로즈우드",
-  "반얀트리", "아만", "식스센스", "세인트레지스", "리츠칼튼", "월도프 아스토리아", "콘래드", "파크 하얏트", "그랜드 하얏트", "안다즈"
-];
-
-export const ATTRACTIONS = [
-  "유니버설 스튜디오", "디즈니랜드", "디즈니씨", "도쿄타워", "스카이트리", "오사카성", "루브르 박물관", "에펠탑", "대영박물관", "런던아이",
-  "콜로세움", "바티칸 미술관", "자유의 여신상", "엠파이어 스테이트", "그랜드 캐니언", "나이아가라 헬기투어", "오로라 관측", "사막 사파리", "스노클링 투어", "미슐랭 미식투어"
-];
-
-export const RENTAL_CARS = [
-  "허츠(Hertz)", "아비스(Avis)", "엔터프라이즈(Enterprise)", "알라모(Alamo)", "유로카(Europcar)", 
-  "내셔널(National)", "버젯(Budget)", "달러(Dollar)", "식스트(Sixt)", "스리프티(Thrifty)",
-  "롯데렌터카", "SK렌터카", "쏘카", "그린카", "타임즈카", "토요타렌터카", "닛산렌터카", "오릭스렌터카"
-];
-
-export const DESTINATIONS = [
-  // 국내선 (Stage 1)
-  { name: "제주", country: "한국", isDomestic: true, stage: 1, basePrice: 50000, airport: "제주(CJU)", minDuration: 1, maxDuration: 3, flightTime: 70 },
-  { name: "부산", country: "한국", isDomestic: true, stage: 1, basePrice: 60000, airport: "김해(PUS)", minDuration: 1, maxDuration: 2, flightTime: 60 },
-  { name: "여수", country: "한국", isDomestic: true, stage: 1, basePrice: 45000, airport: "여수(RSU)", minDuration: 1, maxDuration: 2, flightTime: 55 },
-  { name: "양양", country: "한국", isDomestic: true, stage: 1, basePrice: 40000, airport: "양양(YNY)", minDuration: 1, maxDuration: 2, flightTime: 50 },
-  { name: "광주", country: "한국", isDomestic: true, stage: 1, basePrice: 45000, airport: "광주(KWJ)", minDuration: 1, maxDuration: 2, flightTime: 55 },
-  { name: "포항", country: "한국", isDomestic: true, stage: 1, basePrice: 55000, airport: "포항경주(KPO)", minDuration: 1, maxDuration: 2, flightTime: 55 },
-  { name: "울산", country: "한국", isDomestic: true, stage: 1, basePrice: 55000, airport: "울산(USN)", minDuration: 1, maxDuration: 2, flightTime: 60 },
-  { name: "사천", country: "한국", isDomestic: true, stage: 1, basePrice: 50000, airport: "사천(HIN)", minDuration: 1, maxDuration: 2, flightTime: 60 },
-  { name: "군산", country: "한국", isDomestic: true, stage: 1, basePrice: 45000, airport: "군산(KUV)", minDuration: 1, maxDuration: 2, flightTime: 50 },
-  { name: "원주", country: "한국", isDomestic: true, stage: 1, basePrice: 40000, airport: "원주(WJU)", minDuration: 1, maxDuration: 2, flightTime: 45 },
-
-  // 국제선 (Stage 1)
-  { name: "도쿄", country: "일본", isDomestic: false, stage: 1, basePrice: 200000, airport: "나리타(NRT)", minDuration: 2, maxDuration: 4, flightTime: 140 },
-  { name: "오사카", country: "일본", isDomestic: false, stage: 1, basePrice: 180000, airport: "간사이(KIX)", minDuration: 2, maxDuration: 4, flightTime: 100 },
-  { name: "후쿠오카", country: "일본", isDomestic: false, stage: 1, basePrice: 150000, airport: "후쿠오카(FUK)", minDuration: 2, maxDuration: 3, flightTime: 80 },
-  { name: "삿포로", country: "일본", isDomestic: false, stage: 1, basePrice: 250000, airport: "신치토세(CTS)", minDuration: 3, maxDuration: 4, flightTime: 160 },
-  { name: "오키나와", country: "일본", isDomestic: false, stage: 1, basePrice: 220000, airport: "나하(OKA)", minDuration: 3, maxDuration: 4, flightTime: 130 },
-  { name: "베이징", country: "중국", isDomestic: false, stage: 1, basePrice: 180000, airport: "서우두(PEK)", minDuration: 2, maxDuration: 4, flightTime: 120 },
-  { name: "상하이", country: "중국", isDomestic: false, stage: 1, basePrice: 190000, airport: "푸둥(PVG)", minDuration: 2, maxDuration: 4, flightTime: 110 },
-  { name: "칭다오", country: "중국", isDomestic: false, stage: 1, basePrice: 120000, airport: "류팅(TAO)", minDuration: 2, maxDuration: 3, flightTime: 90 },
-  { name: "타이베이", country: "대만", isDomestic: false, stage: 1, basePrice: 230000, airport: "타오위안(TPE)", minDuration: 2, maxDuration: 4, flightTime: 150 },
-  { name: "홍콩", country: "홍콩", isDomestic: false, stage: 1, basePrice: 260000, airport: "첵랍콕(HKG)", minDuration: 2, maxDuration: 4, flightTime: 210 },
+export const BADGE_REQUIREMENTS: Record<string, { id: string, name: string, icon: string, threshold: number }> = {
+  't_army_1': { id: 'b_ranger', name: '유격', icon: '🦅', threshold: 10 },
+  't_army_2': { id: 'b_winter', name: '혹한기', icon: '❄️', threshold: 10 },
+  't_army_3': { id: 'b_summer', name: '혹서기', icon: '☀️', threshold: 10 },
+  't_army_4': { id: 'b_kctc', name: 'KCTC', icon: '🎯', threshold: 10 },
+  't_army_5': { id: 'b_airborne', name: '공수', icon: '🪂', threshold: 10 },
+  't_army_6': { id: 'b_tank', name: '기갑', icon: '🚜', threshold: 10 },
+  't_army_7': { id: 'b_river', name: '도하', icon: '🌉', threshold: 10 },
+  't_army_8': { id: 'b_ct', name: '대테러', icon: '🥷', threshold: 10 },
+  't_army_9': { id: 'b_cbrn', name: '화생방', icon: '☣️', threshold: 10 },
+  't_army_10': { id: 'b_cqb', name: '시가지', icon: '🏢', threshold: 10 },
   
-  // 국제선 (Stage 2)
-  { name: "마카오", country: "마카오", isDomestic: false, stage: 2, basePrice: 250000, airport: "마카오(MFM)", minDuration: 2, maxDuration: 4, flightTime: 220 },
-  { name: "방콕", country: "태국", isDomestic: false, stage: 2, basePrice: 350000, airport: "수완나품(BKK)", minDuration: 3, maxDuration: 5, flightTime: 350 },
-  { name: "푸껫", country: "태국", isDomestic: false, stage: 2, basePrice: 400000, airport: "푸껫(HKT)", minDuration: 3, maxDuration: 5, flightTime: 380 },
-  { name: "다낭", country: "베트남", isDomestic: false, stage: 2, basePrice: 320000, airport: "다낭(DAD)", minDuration: 3, maxDuration: 5, flightTime: 280 },
-  { name: "하노이", country: "베트남", isDomestic: false, stage: 2, basePrice: 300000, airport: "노이바이(HAN)", minDuration: 3, maxDuration: 5, flightTime: 270 },
-  { name: "호치민", country: "베트남", isDomestic: false, stage: 2, basePrice: 330000, airport: "떤선녓(SGN)", minDuration: 3, maxDuration: 5, flightTime: 310 },
-  { name: "마닐라", country: "필리핀", isDomestic: false, stage: 2, basePrice: 280000, airport: "니노이아키노(MNL)", minDuration: 3, maxDuration: 5, flightTime: 240 },
-  { name: "세부", country: "필리핀", isDomestic: false, stage: 2, basePrice: 310000, airport: "막탄세부(CEB)", minDuration: 3, maxDuration: 5, flightTime: 270 },
-  { name: "보라카이", country: "필리핀", isDomestic: false, stage: 2, basePrice: 340000, airport: "칼리보(KLO)", minDuration: 3, maxDuration: 5, flightTime: 260 },
-  { name: "싱가포르", country: "싱가포르", isDomestic: false, stage: 2, basePrice: 450000, airport: "창이(SIN)", minDuration: 3, maxDuration: 5, flightTime: 380 },
-  
-  // 국제선 (Stage 3)
-  { name: "쿠알라룸푸르", country: "말레이시아", isDomestic: false, stage: 3, basePrice: 420000, airport: "쿠알라룸푸르(KUL)", minDuration: 3, maxDuration: 5, flightTime: 390 },
-  { name: "코타키나발루", country: "말레이시아", isDomestic: false, stage: 3, basePrice: 400000, airport: "코타키나발루(BKI)", minDuration: 3, maxDuration: 5, flightTime: 310 },
-  { name: "발리", country: "인도네시아", isDomestic: false, stage: 3, basePrice: 550000, airport: "응우라라이(DPS)", minDuration: 4, maxDuration: 6, flightTime: 420 },
-  { name: "괌", country: "미국", isDomestic: false, stage: 3, basePrice: 480000, airport: "안토니오비원팻(GUM)", minDuration: 3, maxDuration: 5, flightTime: 260 },
-  { name: "사이판", country: "미국", isDomestic: false, stage: 3, basePrice: 460000, airport: "사이판(SPN)", minDuration: 3, maxDuration: 5, flightTime: 260 },
-  { name: "블라디보스토크", country: "러시아", isDomestic: false, stage: 3, basePrice: 350000, airport: "크네비치(VVO)", minDuration: 2, maxDuration: 4, flightTime: 160 },
-  { name: "울란바토르", country: "몽골", isDomestic: false, stage: 3, basePrice: 400000, airport: "칭기스칸(UBN)", minDuration: 3, maxDuration: 5, flightTime: 220 },
-  { name: "시드니", country: "호주", isDomestic: false, stage: 3, basePrice: 900000, airport: "시드니(SYD)", minDuration: 5, maxDuration: 8, flightTime: 600 },
-  { name: "멜버른", country: "호주", isDomestic: false, stage: 3, basePrice: 950000, airport: "멜버른(MEL)", minDuration: 5, maxDuration: 8, flightTime: 630 },
-  { name: "오클랜드", country: "뉴질랜드", isDomestic: false, stage: 3, basePrice: 1000000, airport: "오클랜드(AKL)", minDuration: 5, maxDuration: 8, flightTime: 660 },
-  
-  // 국제선 (Stage 4)
-  { name: "파리", country: "프랑스", isDomestic: false, stage: 4, basePrice: 1200000, airport: "샤를드골(CDG)", minDuration: 6, maxDuration: 10, flightTime: 840 },
-  { name: "런던", country: "영국", isDomestic: false, stage: 4, basePrice: 1300000, airport: "히스로(LHR)", minDuration: 6, maxDuration: 10, flightTime: 860 },
-  { name: "로마", country: "이탈리아", isDomestic: false, stage: 4, basePrice: 1150000, airport: "피우미치노(FCO)", minDuration: 6, maxDuration: 10, flightTime: 800 },
-  { name: "프랑크푸르트", country: "독일", isDomestic: false, stage: 4, basePrice: 1100000, airport: "프랑크푸르트(FRA)", minDuration: 6, maxDuration: 10, flightTime: 810 },
-  { name: "마드리드", country: "스페인", isDomestic: false, stage: 4, basePrice: 1250000, airport: "바라하스(MAD)", minDuration: 6, maxDuration: 10, flightTime: 880 },
-  { name: "바르셀로나", country: "스페인", isDomestic: false, stage: 4, basePrice: 1250000, airport: "엘프라트(BCN)", minDuration: 6, maxDuration: 10, flightTime: 870 },
-  { name: "취리히", country: "스위스", isDomestic: false, stage: 4, basePrice: 1400000, airport: "취리히(ZRH)", minDuration: 6, maxDuration: 10, flightTime: 820 },
-  { name: "암스테르담", country: "네덜란드", isDomestic: false, stage: 4, basePrice: 1200000, airport: "스히폴(AMS)", minDuration: 6, maxDuration: 10, flightTime: 830 },
-  { name: "프라하", country: "체코", isDomestic: false, stage: 4, basePrice: 1050000, airport: "바츨라프하벨(PRG)", minDuration: 6, maxDuration: 10, flightTime: 800 },
-  { name: "빈", country: "오스트리아", isDomestic: false, stage: 4, basePrice: 1100000, airport: "슈베하트(VIE)", minDuration: 6, maxDuration: 10, flightTime: 790 },
-  
-  // 국제선 (Stage 5)
-  { name: "뉴욕", country: "미국", isDomestic: false, stage: 5, basePrice: 1500000, airport: "존F케네디(JFK)", minDuration: 7, maxDuration: 14, flightTime: 840 },
-  { name: "로스앤젤레스", country: "미국", isDomestic: false, stage: 5, basePrice: 1300000, airport: "로스앤젤레스(LAX)", minDuration: 6, maxDuration: 10, flightTime: 660 },
-  { name: "샌프란시스코", country: "미국", isDomestic: false, stage: 5, basePrice: 1350000, airport: "샌프란시스코(SFO)", minDuration: 6, maxDuration: 10, flightTime: 630 },
-  { name: "시카고", country: "미국", isDomestic: false, stage: 5, basePrice: 1400000, airport: "오헤어(ORD)", minDuration: 6, maxDuration: 10, flightTime: 780 },
-  { name: "하와이", country: "미국", isDomestic: false, stage: 5, basePrice: 1100000, airport: "호놀룰루(HNL)", minDuration: 4, maxDuration: 7, flightTime: 480 },
-  { name: "토론토", country: "캐나다", isDomestic: false, stage: 5, basePrice: 1450000, airport: "피어슨(YYZ)", minDuration: 7, maxDuration: 14, flightTime: 780 },
-  { name: "밴쿠버", country: "캐나다", isDomestic: false, stage: 5, basePrice: 1250000, airport: "밴쿠버(YVR)", minDuration: 6, maxDuration: 10, flightTime: 600 },
-  { name: "두바이", country: "아랍에미리트", isDomestic: false, stage: 5, basePrice: 1000000, airport: "두바이(DXB)", minDuration: 4, maxDuration: 7, flightTime: 570 },
-  { name: "아부다비", country: "아랍에미리트", isDomestic: false, stage: 5, basePrice: 950000, airport: "아부다비(AUH)", minDuration: 4, maxDuration: 7, flightTime: 580 },
-  { name: "몰디브", country: "몰디브", isDomestic: false, stage: 5, basePrice: 1600000, airport: "말레(MLE)", minDuration: 4, maxDuration: 7, flightTime: 660 }
+  't_navy_1': { id: 'b_navy_1', name: '해상', icon: '🌊', threshold: 10 },
+  't_navy_2': { id: 'b_navy_2', name: '순항', icon: '🚢', threshold: 10 },
+  't_navy_3': { id: 'b_navy_3', name: '잠수함', icon: '🦈', threshold: 10 },
+  't_navy_4': { id: 'b_udt', name: 'UDT', icon: '🔱', threshold: 10 },
+  't_navy_5': { id: 'b_navy_5', name: '해상생존', icon: '🛟', threshold: 10 },
+  't_navy_6': { id: 'b_navy_6', name: '함포', icon: '💥', threshold: 10 },
+  't_navy_7': { id: 'b_navy_7', name: '대잠', icon: '📡', threshold: 10 },
+  't_navy_8': { id: 'b_navy_8', name: '소해', icon: '💣', threshold: 10 },
+  't_navy_9': { id: 'b_navy_9', name: '상륙', icon: '🏖️', threshold: 10 },
+  't_navy_10': { id: 'b_navy_10', name: '구조', icon: '🚁', threshold: 10 },
+
+  't_air_1': { id: 'b_redflag', name: '레드플래그', icon: '🚩', threshold: 10 },
+  't_air_2': { id: 'b_air_2', name: '비상대기', icon: '⏱️', threshold: 10 },
+  't_air_3': { id: 'b_air_3', name: '방공', icon: '🚀', threshold: 10 },
+  't_air_4': { id: 'b_air_4', name: '생환', icon: '🏕️', threshold: 10 },
+  't_air_5': { id: 'b_air_5', name: '기지방호', icon: '🛡️', threshold: 10 },
+  't_air_6': { id: 'b_air_6', name: '야간비행', icon: '🦉', threshold: 10 },
+  't_air_7': { id: 'b_air_7', name: '공중급유', icon: '⛽', threshold: 10 },
+  't_air_8': { id: 'b_air_8', name: '정밀타격', icon: '🎯', threshold: 10 },
+  't_air_9': { id: 'b_air_9', name: '전자전', icon: '⚡', threshold: 10 },
+  't_air_10': { id: 'b_air_10', name: '탐색구조', icon: '🚑', threshold: 10 }
+};
+
+export const MEDALS = [
+  { id: 'm_taegeuk', name: '태극 무공훈장', icon: '🎖️' },
+  { id: 'm_eulji', name: '을지 무공훈장', icon: '🏅' },
+  { id: 'm_chungmu', name: '충무 무공훈장', icon: '🥇' },
+  { id: 'm_hwarang', name: '화랑 무공훈장', icon: '🥈' },
+  { id: 'm_inheon', name: '인헌 무공훈장', icon: '🥉' },
+  { id: 'm_tongil', name: '통일 보국훈장', icon: '🏵️' },
+  { id: 'm_gukseon', name: '국선 보국훈장', icon: '💠' },
+  { id: 'm_cheonsu', name: '천수 보국훈장', icon: '⚜️' },
+  { id: 'm_samil', name: '삼일 보국훈장', icon: '🔱' },
+  { id: 'm_gwangbok', name: '광복 보국훈장', icon: '🔆' }
 ];
 
-export const CUSTOMER_TYPES: CustomerType[] = [
-  { name: '혼자 여행 (항공권만)', seats: 1, budgetMultiplier: 1.0, charmReq: 0, isVip: false, wantsHotel: false, wantsAttraction: false, wantsRentalCar: false },
-  { name: '커플 (자유여행)', seats: 2, budgetMultiplier: 1.2, charmReq: 5, isVip: false, wantsHotel: true, wantsAttraction: false, wantsRentalCar: true },
-  { name: '가족 (패키지)', seats: [3, 4, 5], budgetMultiplier: 1.5, charmReq: 15, isVip: false, wantsHotel: true, wantsAttraction: true, wantsRentalCar: true },
-  { name: '학생 (배낭여행)', seats: [1, 2, 3, 4], budgetMultiplier: 0.8, charmReq: 0, isVip: false, wantsHotel: false, wantsAttraction: true, wantsRentalCar: false },
-  { name: '회사 출장', seats: [1, 2, 5, 10], budgetMultiplier: 1.8, charmReq: 25, isVip: false, wantsHotel: true, wantsAttraction: false, wantsRentalCar: true },
-  { name: 'VIP (풀패키지)', seats: [1, 2], budgetMultiplier: 3.5, charmReq: 60, isVip: true, wantsHotel: true, wantsAttraction: true, wantsRentalCar: true },
+export const COMBAT_ZONES = [
+  // Level 1 (소대~중대급)
+  { id: 'cz_af_1', name: '아프리카 소말리아 해적 소탕', level: 1, desc: '해상 및 연안 게릴라 소탕', reward: 100000000, minRank: 9, enemyTroops: 50, enemyUnit: '2개 소대' },
+  { id: 'cz_af_2', name: '아프리카 말리 반군 진압', level: 1, desc: '사막 지대 반군 거점 타격', reward: 120000000, minRank: 9, enemyTroops: 80, enemyUnit: '3개 소대' },
+  { id: 'cz_af_3', name: '아프리카 콩고 평화유지', level: 1, desc: 'UN 평화유지군 거점 방어', reward: 150000000, minRank: 9, enemyTroops: 120, enemyUnit: '1개 중대' },
+  // Level 2 (중대~대대급)
+  { id: 'cz_me_1', name: '중동 시리아 시가전', level: 2, desc: '폐허가 된 도심지 소탕 작전', reward: 300000000, minRank: 10, enemyTroops: 200, enemyUnit: '2개 중대' },
+  { id: 'cz_me_2', name: '중동 예멘 반군 요새 타격', level: 2, desc: '산악 지대 반군 요새 점령', reward: 350000000, minRank: 10, enemyTroops: 350, enemyUnit: '3개 중대' },
+  { id: 'cz_me_3', name: '중동 이라크 유전 방어', level: 2, desc: '주요 전략 자원 시설 방어', reward: 400000000, minRank: 10, enemyTroops: 500, enemyUnit: '1개 대대' },
+  // Level 3 (대대~연대급)
+  { id: 'cz_ir_1', name: '이란-이스라엘 접경 국지전', level: 3, desc: '고강도 드론 및 포격전', reward: 800000000, minRank: 11, enemyTroops: 1000, enemyUnit: '2개 대대' },
+  { id: 'cz_ir_2', name: '호르무즈 해협 봉쇄 해제', level: 3, desc: '해상 교통로 확보 작전', reward: 900000000, minRank: 11, enemyTroops: 1500, enemyUnit: '3개 대대' },
+  { id: 'cz_ir_3', name: '레바논 후티 반군 본거지 타격', level: 3, desc: '적 지휘부 정밀 타격 및 섬멸', reward: 1000000000, minRank: 11, enemyTroops: 2000, enemyUnit: '1개 연대' },
+  // Level 4 (연대~사단급)
+  { id: 'cz_uk_1', name: '우크라이나 동부 참호전', level: 4, desc: '대규모 포격 및 기갑전', reward: 2000000000, minRank: 13, enemyTroops: 5000, enemyUnit: '2개 연대' },
+  { id: 'cz_uk_2', name: '우크라이나 크림반도 상륙', level: 4, desc: '적 후방 교란 및 상륙 작전', reward: 2500000000, minRank: 13, enemyTroops: 8000, enemyUnit: '3개 연대' },
+  { id: 'cz_uk_3', name: '우크라이나 키이우 방어전', level: 4, desc: '수도 방위를 위한 총력전', reward: 3000000000, minRank: 13, enemyTroops: 12000, enemyUnit: '1개 사단' },
+  // Level 5 (사단~군단급)
+  { id: 'cz_ww3_1', name: '제3차 세계대전: 동아시아 전선', level: 5, desc: '주변 강대국과의 전면전', reward: 5000000000, minRank: 15, enemyTroops: 30000, enemyUnit: '3개 사단' },
+  { id: 'cz_ww3_2', name: '제3차 세계대전: 태평양 해전', level: 5, 적: '적 항모전단 격멸 작전', reward: 8000000000, minRank: 15, enemyTroops: 50000, enemyUnit: '1개 군단' },
+  { id: 'cz_ww3_3', name: '제3차 세계대전: 적 수도 진격', level: 5, desc: '전쟁 종결을 위한 최후의 진격', reward: 15000000000, minRank: 15, enemyTroops: 100000, enemyUnit: '2개 군단' }
 ];
 
-export const EMPLOYEE_ROLES = ["예약 전문가", "항공 전문가", "호텔 전문가", "패키지 전문가", "마케팅 전문가", "VIP 담당", "외국어 담당"];
-export const EMPLOYEE_LEVELS = ["신입", "사원", "주임", "대리", "과장", "차장", "부장", "이사", "전무", "대표"];
-
-export const RANDOM_EVENTS: Omit<GameEvent, 'id' | 'duration'>[] = [
-  { name: "글로벌 스포츠 축제", description: "전 세계적인 스포츠 행사로 여행 수요가 폭증합니다!", type: "positive", priceMultiplier: 1.5, demandMultiplier: 2.0 },
-  { name: "유명 인플루언서 방문", description: "특정 지역이 SNS에서 화제가 되었습니다.", type: "positive", priceMultiplier: 1.2, demandMultiplier: 1.5 },
-  { name: "대형 태풍 발생", description: "기상 악화로 인해 항공편 결항 우려가 있습니다.", type: "negative", priceMultiplier: 0.7, demandMultiplier: 0.5 },
-  { name: "환율 급등", description: "해외 여행 경비 부담으로 수요가 감소합니다.", type: "negative", priceMultiplier: 0.9, demandMultiplier: 0.7 },
-  { name: "항공사 파업", description: "일부 항공편 운항이 취소될 수 있습니다.", type: "negative", priceMultiplier: 1.3, demandMultiplier: 0.6 },
+export const CIVIL_SUPPORT_MISSIONS = [
+  { id: 'cs_flood', name: '수해 복구 지원', desc: '침수 지역 도로 및 가옥 복구', reward: 150000000 },
+  { id: 'cs_snow', name: '폭설 제설 작전', desc: '주요 보급로 및 도심 제설', reward: 100000000 },
+  { id: 'cs_fire', name: '대형 산불 진화', desc: '산불 진화 및 주민 대피 지원', reward: 200000000 },
+  { id: 'cs_medical', name: '대민 의료 지원', desc: '전염병 창궐 지역 의료진 파견', reward: 250000000 },
+  { id: 'cs_allied', name: '동맹군 합동 훈련 지원', desc: '다국적 연합 작전 및 군수 지원', reward: 500000000 }
 ];
+
+export const MOS_LIST = [
+  { id: 'mos_rifle', name: '소총수', cost: 2000000, baseCount: 10 },
+  { id: 'mos_medic', name: '의무병', cost: 5000000, baseCount: 5 },
+  { id: 'mos_comms', name: '통신병', cost: 4000000, baseCount: 5 },
+  { id: 'mos_eng', name: '공병', cost: 6000000, baseCount: 5 },
+  { id: 'mos_heavy', name: '중화기병', cost: 8000000, baseCount: 5 }
+];
+
+export const RD_PROJECTS = [
+  { id: 'rd_missile', name: '중장거리 미사일 개발', baseCost: 500000000, desc: '타격력 증가 (작전 성공률 +2%)' },
+  { id: 'rd_tank', name: '차세대 전차 개발', baseCost: 800000000, desc: '기갑 전력 강화 (작전 성공률 +2%)' },
+  { id: 'rd_patriot', name: '패트리어트 방공망', baseCost: 1000000000, desc: '생존성 증가 (작전 성공률 +2%)' }
+];
+
+export const SPECIAL_FORCES_TYPES = ['UDT/SEAL', '해병대 수색대', '707 특수임무단', '화이트부대 (정보사)', '기동타격대'];
+
+const MERCENARY_NAMES = ['블랙워터', '바그너 그룹', '아카데미', 'G4S', '데프콘', '쉐도우 컴퍼니', '아이언 사이트', '로그 스피어'];
+
+const KOREAN_NAMES = [
+  '김민준', '이서준', '박도윤', '최예준', '정시우', '강하준', '조지호', '윤지훈', '장우진', '임건우',
+  '한현우', '오연우', '서동현', '신승민', '권준서', '황민재', '안성현', '송준우', '전지훈', '홍성민',
+  '유진우', '백도현', '문건우', '최지훈', '정우진', '강민재', '조성현', '윤준우', '장지훈', '임성민',
+  '박지성', '이동국', '손흥민', '김민재', '이강인', '황희찬', '이재성', '정우영', '황인범', '조규성'
+];
+
+export const KOREA_MAP_BASES: MapBase[] = [
+  { id: 'mb_1', name: '제1군단 사령부', type: '군단', x: 35, y: 20, troops: 40000, commander: '김군단 중장', status: '경계' },
+  { id: 'mb_2', name: '제5군단 사령부', type: '군단', x: 55, y: 15, troops: 40000, commander: '이군단 중장', status: '경계' },
+  { id: 'mb_3', name: '제7기동군단', type: '군단', x: 60, y: 35, troops: 50000, commander: '박기동 중장', status: '훈련중' },
+  { id: 'mb_4', name: '제9보병사단', type: '사단', x: 30, y: 25, troops: 10000, commander: '최사단 소장', status: '경계' },
+  { id: 'mb_5', name: '제60동원보병사단', type: '사단', x: 40, y: 30, troops: 8000, commander: '정동원 소장', status: '대기' },
+  { id: 'mb_6', name: '제7공수특전여단', type: '여단', x: 70, y: 60, troops: 3000, commander: '강공수 준장', status: '작전중' },
+  { id: 'mb_7', name: '제1해병사단', type: '사단', x: 80, y: 70, troops: 12000, commander: '조해병 소장', status: '훈련중' },
+  { id: 'mb_8', name: '수도방위사령부', type: '군단', x: 45, y: 28, troops: 30000, commander: '윤수방 중장', status: '경계' },
+  { id: 'mb_9', name: '제11기동사단', type: '사단', x: 65, y: 25, troops: 10000, commander: '장기동 소장', status: '훈련중' },
+  { id: 'mb_10', name: '제32보병사단', type: '사단', x: 50, y: 50, troops: 9000, commander: '임보병 소장', status: '경계' },
+  { id: 'mb_11', name: '제31보병사단', type: '사단', x: 35, y: 75, troops: 9000, commander: '한보병 소장', status: '대기' },
+  { id: 'mb_12', name: '제39보병사단', type: '사단', x: 65, y: 80, troops: 9000, commander: '오보병 소장', status: '경계' },
+  { id: 'mb_13', name: '제1특전대대', type: '대대', x: 72, y: 58, troops: 400, commander: '김특전 중령', status: '작전중' },
+  { id: 'mb_14', name: '제2기갑대대', type: '대대', x: 62, y: 38, troops: 450, commander: '이기갑 중령', status: '훈련중' },
+  { id: 'mb_15', name: '제3수색중대', type: '중대', x: 32, y: 22, troops: 120, commander: '박수색 대위', status: '경계' },
+  { id: 'mb_16', name: '제1기동소대', type: '소대', x: 48, y: 26, troops: 40, commander: '최기동 소위', status: '대기' }
+];
+
+export const getTroopsForRole = (role: string): number => {
+  if (role.includes('야전군')) return 160000;
+  if (role.includes('군단')) return 40000;
+  if (role.includes('사단')) return 10000;
+  if (role.includes('연대') || role.includes('여단')) return 1728;
+  if (role.includes('대대')) return 432;
+  if (role.includes('중대')) return 108;
+  if (role.includes('소대')) return 36;
+  if (role.includes('분대')) return 12;
+  return 5; // 참모 등
+};
+
+export const generateSubordinate = (role: string, rankIndex: number): Subordinate => {
+  const randomName = KOREAN_NAMES[Math.floor(Math.random() * KOREAN_NAMES.length)];
+  return {
+    id: Math.random().toString(36).substr(2, 9),
+    name: randomName,
+    rankIndex,
+    xp: XP_REQUIREMENTS[rankIndex] || 0,
+    role,
+    troops: getTroopsForRole(role),
+    status: '양호'
+  };
+};
+
+export const generateSpecialApplicant = (): SpecialApplicant => {
+  const randomName = KOREAN_NAMES[Math.floor(Math.random() * KOREAN_NAMES.length)];
+  const type = SPECIAL_FORCES_TYPES[Math.floor(Math.random() * SPECIAL_FORCES_TYPES.length)];
+  const rankIndex = Math.floor(Math.random() * 6) + 9; // 9 (소위) to 14 (대령)
+  const int = Math.floor(Math.random() * 50) + 50;
+  const sta = Math.floor(Math.random() * 50) + 50;
+  const cha = Math.floor(Math.random() * 50) + 50;
+  
+  const rankMultiplier = rankIndex - 8; // 1 to 6
+  const combatPower = (rankMultiplier * 150) + int + sta + cha + Math.floor(Math.random() * 100);
+  const cost = (rankMultiplier * 300000000) + Math.floor(Math.random() * 200000000);
+  
+  return {
+    id: Math.random().toString(36).substr(2, 9),
+    name: randomName,
+    rankIndex,
+    type,
+    stats: { intelligence: int, stamina: sta, charisma: cha, reputation: 0 },
+    combatPower,
+    cost
+  };
+};
+
+export const generateMercenary = (): MercenaryUnit => {
+  const isBattalion = Math.random() > 0.5;
+  const size = isBattalion ? '대대' : '중대';
+  const troops = isBattalion ? 432 : 108;
+  const combatPower = isBattalion ? Math.floor(Math.random() * 15000) + 15000 : Math.floor(Math.random() * 5000) + 5000;
+  const cost = isBattalion ? Math.floor(Math.random() * 4000000000) + 4000000000 : Math.floor(Math.random() * 2000000000) + 1000000000;
+  const remainingUses = Math.floor(Math.random() * 3) + 3; // 3~5 uses
+  return {
+    id: Math.random().toString(36).substr(2, 9),
+    name: MERCENARY_NAMES[Math.floor(Math.random() * MERCENARY_NAMES.length)],
+    size,
+    troops,
+    combatPower,
+    cost,
+    remainingUses
+  };
+};
+
+export const generateCommandTree = (parentRank: number, roleType?: string): Subordinate[] => {
+  let subs: Subordinate[] = [];
+
+  const buildHierarchy = (roleName: string, rankIdx: number, childType: string | null, childCount: number, childRank: number, prefix: string, currentDepth: number, maxDepth: number): Subordinate => {
+    const sub = generateSubordinate(`${prefix}${roleName}`, rankIdx);
+    if (childType && currentDepth < maxDepth) {
+      sub.subordinates = [];
+      for (let i = 1; i <= childCount; i++) {
+        let nextType = null, nextCount = 0, nextRank = 0;
+        if (childType === '야전군사령관') { nextType = '군단장'; nextCount = 4; nextRank = 17; }
+        else if (childType === '군단장') { nextType = '사단장'; nextCount = 4; nextRank = 16; }
+        else if (childType === '사단장') { nextType = '연대장'; nextCount = 4; nextRank = 14; }
+        else if (childType === '연대장') { nextType = '대대장'; nextCount = 4; nextRank = 13; }
+        else if (childType === '대대장') { nextType = '중대장'; nextCount = 4; nextRank = 11; }
+        else if (childType === '중대장') { nextType = '소대장'; nextCount = 4; nextRank = 9; }
+        else if (childType === '소대장') { nextType = '분대장'; nextCount = 3; nextRank = 4; }
+
+        sub.subordinates.push(buildHierarchy(childType, childRank, nextType, nextCount, nextRank, `${i}`, currentDepth + 1, maxDepth));
+      }
+    }
+    return sub;
+  };
+
+  if (roleType === 'MAJOR_OPS') {
+    subs.push(generateSubordinate('작전장교', 11));
+    subs.push(generateSubordinate('군수장교', 11));
+    return subs;
+  }
+  if (roleType === 'BG_STAFF') {
+    subs.push(generateSubordinate('작전처장', 14));
+    subs.push(generateSubordinate('정보처장', 14));
+    subs.push(generateSubordinate('군수처장', 14));
+    return subs;
+  }
+
+  const maxD = 4; // Limit depth to prevent memory issues on high ranks
+
+  switch (parentRank) {
+    case 19: // 원수
+      for(let i=1; i<=4; i++) subs.push(buildHierarchy('야전군사령관', 18, '군단장', 4, 17, `${i}`, 1, maxD));
+      break;
+    case 18: // 대장
+      for(let i=1; i<=4; i++) subs.push(buildHierarchy('군단장', 17, '사단장', 4, 16, `${i}`, 1, maxD));
+      break;
+    case 17: // 중장
+      for(let i=1; i<=4; i++) subs.push(buildHierarchy('사단장', 16, '연대장', 4, 14, `${i}`, 1, maxD));
+      subs.push(buildHierarchy('동원사단장', 16, '연대장', 4, 14, '', 1, maxD));
+      break;
+    case 16: // 소장
+      subs.push(generateSubordinate('부사단장', 15));
+      for(let i=1; i<=4; i++) subs.push(buildHierarchy('연대장', 14, '대대장', 4, 13, `${i}`, 1, maxD));
+      break;
+    case 15: // 준장 (여단장)
+      for(let i=1; i<=4; i++) subs.push(buildHierarchy('대대장', 13, '중대장', 4, 11, `${i}`, 1, maxD));
+      break;
+    case 14: // 대령
+      for(let i=1; i<=4; i++) subs.push(buildHierarchy('대대장', 13, '중대장', 4, 11, `${i}`, 1, maxD));
+      break;
+    case 13: // 중령
+      for(let i=1; i<=4; i++) subs.push(buildHierarchy('중대장', 11, '소대장', 4, 9, `${i}`, 1, maxD));
+      break;
+    case 12: // 소령 (중대장)
+      for(let i=1; i<=2; i++) subs.push(buildHierarchy('중대장', 11, '소대장', 4, 9, `${i}`, 1, maxD));
+      break;
+    case 11: // 대위
+      for(let i=1; i<=4; i++) subs.push(buildHierarchy('소대장', 9, '분대장', 3, 4, `${i}`, 1, maxD));
+      break;
+    case 10: // 중위
+      for(let i=1; i<=2; i++) subs.push(buildHierarchy('소대장', 9, '분대장', 3, 4, `${i}`, 1, maxD));
+      break;
+    case 9: // 소위
+      for(let i=1; i<=3; i++) subs.push(buildHierarchy('분대장', 4, null, 0, 0, `${i}`, 1, maxD));
+      break;
+  }
+  return subs;
+};
+
+export const getPlayerRoleName = (rankIndex: number, currentRole?: string): string => {
+  switch (rankIndex) {
+    case 9:
+    case 10: return '소대장';
+    case 11: return '중대장';
+    case 12: return currentRole === 'MAJOR_OPS' ? '작전참모' : (currentRole === 'MAJOR_CMD' ? '중대장' : '');
+    case 13: return '대대장';
+    case 14: return '여단장';
+    case 15: return currentRole === 'BG_STAFF' ? '작전참모장' : (currentRole === 'BG_CMD' ? '여단장' : '');
+    case 16: return '사단장';
+    case 17: return '군단장';
+    case 18: return '야전군사령관';
+    case 19: return '총사령관';
+    default: return '';
+  }
+};
