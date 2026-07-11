@@ -1,5 +1,5 @@
 {
-  "name": "world-tour-tycoon",
+  "name": "supreme-commander-path-to-glory",
   "workspaces": ["frontend", "backend"], 
   "scripts": {
     "dev-frontend": "npm run dev --prefix frontend",
