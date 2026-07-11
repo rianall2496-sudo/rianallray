@@ -3,46 +3,32 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>World Tour Tycoon</title>
+  <title>Supreme Commander</title>
   <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-    body {
-      background-color: #f8fafc;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            military: {
+              dark: '#1a202c',
+              panel: '#2d3748',
+              army: '#4a5568',
+              army_light: '#718096',
+              navy: '#2b6cb0',
+              airforce: '#4299e1',
+              accent: '#ecc94b',
+              danger: '#e53e3e',
+              success: '#48bb78'
+            }
+          }
+        }
+      }
     }
-    .custom-scrollbar::-webkit-scrollbar {
-      width: 6px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-track {
-      background: #f1f5f9;
-      border-radius: 4px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-      background: #cbd5e1;
-      border-radius: 4px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-      background: #94a3b8;
-    }
-    
-    /* Ticker Animation */
-    @keyframes ticker {
-      0% { transform: translateX(100vw); }
-      100% { transform: translateX(-100%); }
-    }
-    .animate-ticker {
-      display: inline-block;
-      white-space: nowrap;
-      animation: ticker 45s linear infinite;
-      will-change: transform;
-    }
-    .animate-ticker:hover {
-      animation-play-state: paused;
-    }
-  </style>
-</head>
-<body>
-  <div id="root"></div>
+  </script>
+  </head>
+<body class="bg-military-dark text-gray-200 h-screen overflow-hidden font-sans">
+  <div id="root" class="h-full"></div>
   <script type="module" src="./index.tsx"></script>
 <script type="module" src="/index.js"></script></body>
 </html>
