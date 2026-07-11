@@ -1,5 +1,5 @@
 {
-  "name": "world-tour-tycoon-frontend",
+  "name": "supreme-commander-path-to-glory-frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -11,6 +11,7 @@
   "dependencies": {
     "react": "latest",
     "react-dom": "latest",
+    "@google/genai": "latest",
     "lucide-react": "latest"
   },
   "devDependencies": {
